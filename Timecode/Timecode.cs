@@ -1,11 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
-using System.Runtime.Serialization;
 using System.Text.RegularExpressions;
-using Microsoft.VisualBasic.FileIO;
 
 namespace TimecodeUtils.Timecode
 {
@@ -28,7 +25,7 @@ namespace TimecodeUtils.Timecode
         /// <summary>
         /// Total frames of the timecode file
         /// </summary>
-        public int TotalFrames => _intervalList.Count == 0 ? 0 : _intervalList[^1].EndFrame + 1;
+        public int TotalFrames => _intervalList.Count == 0 ? 0 : _intervalList[_intervalList.Count - 1].EndFrame + 1;
 
         /// <summary>
         /// Average frame rate of the timecode file
@@ -68,29 +65,30 @@ namespace TimecodeUtils.Timecode
         /// This parameter only effected when reading timecode v1. If not provided, the last frame from the last record is used</param>
         public Timecode(Stream stream, int frames = 0)
         {
-            using var reader = new StreamReader(stream);
-
-            var line = reader.ReadLine() ?? throw new InvalidOperationException();
-            var regex = new Regex(@"\A# time(?:code|stamp) format (v[1-2])");
-            var match = regex.Match(line);
-            if (!match.Success)
+            using (var reader = new StreamReader(stream))
             {
-                throw new FormatException("Illegal file header or timecode version.");
-            }
+                var line = reader.ReadLine() ?? throw new InvalidOperationException();
+                var regex = new Regex(@"\A# time(?:code|stamp) format (v[1-2])");
+                var match = regex.Match(line);
+                if (!match.Success)
+                {
+                    throw new FormatException("Illegal file header or timecode version.");
+                }
 
-            switch (match.Groups[1].Value)
-            {
-                case "v1":
-                    Version = TimecodeVersion.V1;
-                    TimecodeV1Handler(reader, frames);
-                    break;
-                case "v2":
-                    Version = TimecodeVersion.V2;
-                    TimecodeV2Handler(reader);
-                    break;
-            }
+                switch (match.Groups[1].Value)
+                {
+                    case "v1":
+                        Version = TimecodeVersion.V1;
+                        TimecodeV1Handler(reader, frames);
+                        break;
+                    case "v2":
+                        Version = TimecodeVersion.V2;
+                        TimecodeV2Handler(reader);
+                        break;
+                }
 
-            NormalizeInterval();
+                NormalizeInterval();
+            }
         }
 
         /// <summary>
@@ -100,8 +98,10 @@ namespace TimecodeUtils.Timecode
         /// <param name="version">The version of timecode file</param>
         public void SaveTimecode(string path, TimecodeVersion version = TimecodeVersion.V2)
         {
-            using var fileStream = new FileStream(path, FileMode.CreateNew, FileAccess.Write);
-            SaveTimecode(fileStream, version);
+            using (var fileStream = new FileStream(path, FileMode.CreateNew, FileAccess.Write))
+            {
+                SaveTimecode(fileStream, version);
+            }
         }
 
         /// <summary>
@@ -111,18 +111,19 @@ namespace TimecodeUtils.Timecode
         /// <param name="version">The version of timecode file</param>
         public void SaveTimecode(Stream stream, TimecodeVersion version = TimecodeVersion.V2)
         {
-            using var writer = new StreamWriter(stream);
-
-            switch (version)
+            using (var writer = new StreamWriter(stream))
             {
-                case TimecodeVersion.V1:
-                    SaveTimecodeV1(writer);
-                    break;
-                case TimecodeVersion.V2:
-                    SaveTimecodeV2(writer);
-                    break;
-                default:
-                    throw new ArgumentOutOfRangeException(nameof(version), version, null);
+                switch (version)
+                {
+                    case TimecodeVersion.V1:
+                        SaveTimecodeV1(writer);
+                        break;
+                    case TimecodeVersion.V2:
+                        SaveTimecodeV2(writer);
+                        break;
+                    default:
+                        throw new ArgumentOutOfRangeException(nameof(version), version, null);
+                }
             }
         }
 
@@ -143,7 +144,7 @@ namespace TimecodeUtils.Timecode
                 return interval.EndFrame - deltaFrame + 1;
             }
 
-            return _intervalList[^1].EndFrame;
+            return TotalFrames - 1;
         }
 
         /// <summary>
@@ -173,7 +174,7 @@ namespace TimecodeUtils.Timecode
             while ((line = reader.ReadLine()) != null)
             {
                 line = line.Trim();
-                if (line.Length == 0 || line.StartsWith('#')) continue;
+                if (line.Length == 0 || line.StartsWith("#")) continue;
                 if (!line.StartsWith("assume", true, null)) continue;
                 defaultInterval = 1e7 / double.Parse(line.Substring(6));
                 break;
@@ -185,7 +186,7 @@ namespace TimecodeUtils.Timecode
             while ((line = reader.ReadLine()) != null)
             {
                 line = line.Trim();
-                if (line.Length == 0 || line.StartsWith('#')) continue;
+                if (line.Length == 0 || line.StartsWith("#")) continue;
                 var match = lineRegex.Match(line);
                 if (!match.Success) throw new FormatException($"Illegal line: {line}");
                 var start = int.Parse(match.Groups["start"].Value);
@@ -238,7 +239,7 @@ namespace TimecodeUtils.Timecode
             while ((line = reader.ReadLine()) != null)
             {
                 line = line.Trim();
-                if (line.Length == 0 || line.StartsWith('#')) continue;
+                if (line.Length == 0 || line.StartsWith("#")) continue;
                 currentTime = double.Parse(line);
                 ++currentFrame;
                 if (lastTime == -1)

@@ -10,8 +10,10 @@ namespace TimecodeUtils.Options
 
         [Option('l', "length", HelpText = "Total frames of the file")]
         public int Length { get; set; } = 0;
-        [Option('f',"fix", HelpText = "Fix timecode only")]
+
+        [Option('f', "fix", HelpText = "Fix timecode only")]
         public bool Fix { get; set; } = false;
+
         [Option('o', "output", HelpText = "Path for output")]
         public string Output { get; set; } = string.Empty;
     }
