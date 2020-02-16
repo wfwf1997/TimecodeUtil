@@ -1,38 +1,21 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
+using System.Runtime.Serialization;
 using System.Text.RegularExpressions;
 using Microsoft.VisualBasic.FileIO;
 
-namespace TimecodeUtils
+namespace TimecodeUtils.Timecode
 {
-    public enum TimecodeVersion
-    {
-        V1,
-        V2
-    }
-
-    internal class RangeInterval
-    {
-        public int StartFrame;
-        public int EndFrame;
-        public double Interval;
-
-        public RangeInterval(int startFrame, int endFrame, double interval)
-        {
-            StartFrame = startFrame;
-            EndFrame = endFrame;
-            Interval = interval;
-        }
-    }
-
     public class Timecode
     {
         private readonly List<RangeInterval> _intervalList = new List<RangeInterval>();
+        public IEnumerable<RangeInterval> IntervalList => _intervalList.Select(i => new RangeInterval(i));
 
         /// <summary>
-        /// Total frames of the timecode file
+        /// Total length of the timecode file
         /// </summary>
         public TimeSpan TotalLength =>
             new TimeSpan((long) _intervalList.Sum(interval =>
@@ -47,6 +30,12 @@ namespace TimecodeUtils
         /// Average frame rate of the timecode file
         /// </summary>
         public double AverageFrameRate => 1e7 * TotalFrames / TotalLength.Ticks;
+
+        public double DefaultFrameRate => _intervalList.Count == 0
+            ? 0
+            : 1e7 / _intervalList.GroupBy(i => i.Interval)
+                .OrderByDescending(g => g.Count())
+                .First().Key;
 
         /// <summary>
         /// The constructor. It reads timecode info from specific file
