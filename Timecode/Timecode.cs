@@ -12,6 +12,10 @@ namespace TimecodeUtils.Timecode
     public class Timecode
     {
         private readonly List<RangeInterval> _intervalList = new List<RangeInterval>();
+
+        /// <summary>
+        /// Enumerable copies of range intervals
+        /// </summary>
         public IEnumerable<RangeInterval> IntervalList => _intervalList.Select(i => new RangeInterval(i));
 
         /// <summary>
@@ -31,11 +35,19 @@ namespace TimecodeUtils.Timecode
         /// </summary>
         public double AverageFrameRate => 1e7 * TotalFrames / TotalLength.Ticks;
 
+        /// <summary>
+        /// Calculated default frame rate of the timecode
+        /// </summary>
         public double DefaultFrameRate => _intervalList.Count == 0
             ? 0
             : 1e7 / _intervalList.GroupBy(i => i.Interval)
                 .OrderByDescending(g => g.Count())
                 .First().Key;
+
+        /// <summary>
+        /// Original version of the input timecode
+        /// </summary>
+        public readonly TimecodeVersion Version;
 
         /// <summary>
         /// The constructor. It reads timecode info from specific file
@@ -69,9 +81,11 @@ namespace TimecodeUtils.Timecode
             switch (match.Groups[1].Value)
             {
                 case "v1":
+                    Version = TimecodeVersion.V1;
                     TimecodeV1Handler(reader, frames);
                     break;
                 case "v2":
+                    Version = TimecodeVersion.V2;
                     TimecodeV2Handler(reader);
                     break;
             }
@@ -87,7 +101,17 @@ namespace TimecodeUtils.Timecode
         public void SaveTimecode(string path, TimecodeVersion version = TimecodeVersion.V2)
         {
             using var fileStream = new FileStream(path, FileMode.CreateNew, FileAccess.Write);
-            using var writer = new StreamWriter(fileStream);
+            SaveTimecode(fileStream, version);
+        }
+
+        /// <summary>
+        /// Function to the timecode file.
+        /// </summary>
+        /// <param name="path">The stream for outputing timecode</param>
+        /// <param name="version">The version of timecode file</param>
+        public void SaveTimecode(Stream stream, TimecodeVersion version = TimecodeVersion.V2)
+        {
+            using var writer = new StreamWriter(stream);
 
             switch (version)
             {
