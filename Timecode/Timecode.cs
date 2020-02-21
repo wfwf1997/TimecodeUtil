@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
@@ -44,7 +45,7 @@ namespace TimecodeUtils.Timecode
         /// <summary>
         /// Original version of the input timecode
         /// </summary>
-        public readonly TimecodeVersion Version;
+        public readonly MetaData Meta = new MetaData();
 
         /// <summary>
         /// The constructor. It reads timecode info from specific file
@@ -53,42 +54,39 @@ namespace TimecodeUtils.Timecode
         /// <param name="frames">The total frames of the timecode file for fill the "gaps".
         /// This parameter only effected when reading timecode v1. If not provided, the last frame from the last record is used</param>
         public Timecode(string path, int frames = 0)
-            : this(new FileStream(path, FileMode.Open, FileAccess.Read), frames)
+            : this(new StreamReader(new FileStream(path, FileMode.Open, FileAccess.Read)), frames)
         {
         }
 
         /// <summary>
         /// The constructor. It reads timecode info from specific file
         /// </summary>
-        /// <param name="stream">The stream represents the timecode file being loaded. It can either be in v1 or v2 format</param>
+        /// <param name="reader">The text reader for the timecode file being loaded. It can either be in v1 or v2 format</param>
         /// <param name="frames">The total frames of the timecode file for fill the "gaps".
         /// This parameter only effected when reading timecode v1. If not provided, the last frame from the last record is used</param>
-        public Timecode(Stream stream, int frames = 0)
+        public Timecode(TextReader reader, int frames = 0)
         {
-            using (var reader = new StreamReader(stream))
+            var line = reader.ReadLine() ?? throw new InvalidOperationException();
+            var regex = new Regex(@"\A# time(?:code|stamp) format (v[1-2])");
+            var match = regex.Match(line);
+            if (!match.Success)
             {
-                var line = reader.ReadLine() ?? throw new InvalidOperationException();
-                var regex = new Regex(@"\A# time(?:code|stamp) format (v[1-2])");
-                var match = regex.Match(line);
-                if (!match.Success)
-                {
-                    throw new FormatException("Illegal file header or timecode version.");
-                }
-
-                switch (match.Groups[1].Value)
-                {
-                    case "v1":
-                        Version = TimecodeVersion.V1;
-                        TimecodeV1Handler(reader, frames);
-                        break;
-                    case "v2":
-                        Version = TimecodeVersion.V2;
-                        TimecodeV2Handler(reader);
-                        break;
-                }
-
-                NormalizeInterval();
+                throw new FormatException("Illegal file header or timecode version.");
             }
+
+            switch (match.Groups[1].Value)
+            {
+                case "v1":
+                    Meta.Version = TimecodeVersion.V1;
+                    TimecodeV1Handler(reader, frames);
+                    break;
+                case "v2":
+                    Meta.Version = TimecodeVersion.V2;
+                    TimecodeV2Handler(reader);
+                    break;
+            }
+
+            NormalizeInterval();
         }
 
         /// <summary>
@@ -100,7 +98,10 @@ namespace TimecodeUtils.Timecode
         {
             using (var fileStream = new FileStream(path, FileMode.CreateNew, FileAccess.Write))
             {
-                SaveTimecode(fileStream, version);
+                using (var textWriter = new StreamWriter(fileStream))
+                {
+                    SaveTimecode(textWriter, version);
+                }
             }
         }
 
@@ -109,21 +110,18 @@ namespace TimecodeUtils.Timecode
         /// </summary>
         /// <param name="path">The stream for outputing timecode</param>
         /// <param name="version">The version of timecode file</param>
-        public void SaveTimecode(Stream stream, TimecodeVersion version = TimecodeVersion.V2)
+        public void SaveTimecode(TextWriter writer, TimecodeVersion version = TimecodeVersion.V2)
         {
-            using (var writer = new StreamWriter(stream))
+            switch (version)
             {
-                switch (version)
-                {
-                    case TimecodeVersion.V1:
-                        SaveTimecodeV1(writer);
-                        break;
-                    case TimecodeVersion.V2:
-                        SaveTimecodeV2(writer);
-                        break;
-                    default:
-                        throw new ArgumentOutOfRangeException(nameof(version), version, null);
-                }
+                case TimecodeVersion.V1:
+                    SaveTimecodeV1(writer);
+                    break;
+                case TimecodeVersion.V2:
+                    SaveTimecodeV2(writer);
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(version), version, null);
             }
         }
 
@@ -166,6 +164,12 @@ namespace TimecodeUtils.Timecode
             return new TimeSpan((long) Math.Round(time));
         }
 
+        public void SetTotalFrames(int length)
+        {
+            if (Meta.Version == TimecodeVersion.V2 || length <= TotalFrames) return;
+            _intervalList.Add(new RangeInterval(TotalFrames, length - 1, Meta.Interval));
+        }
+
         private void TimecodeV1Handler(TextReader reader, int frames)
         {
             double defaultInterval = 0;
@@ -181,6 +185,7 @@ namespace TimecodeUtils.Timecode
             }
 
             if (defaultInterval == 0) throw new FormatException("Can not find default frame rate description.");
+            Meta.Interval = defaultInterval;
 
             var lineRegex = new Regex(@"^(?<start>\d+)\s*,\s*(?<end>\d+)\s*,\s*(?<rate>\d+(?:\.\d*)?)$");
             while ((line = reader.ReadLine()) != null)
@@ -272,8 +277,8 @@ namespace TimecodeUtils.Timecode
                 lastTime = currentTime;
             }
 
-            _intervalList.Add(new RangeInterval(firstFrame, currentFrame,
-                (1e4 * (lastTime - firstTime) / (currentFrame - firstFrame))));
+            Meta.Interval = 1e4 * (lastTime - firstTime) / (currentFrame - firstFrame);
+            _intervalList.Add(new RangeInterval(firstFrame, currentFrame, Meta.Interval));
         }
 
         private void NormalizeInterval()

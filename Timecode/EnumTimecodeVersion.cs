@@ -2,7 +2,7 @@
 {
     public enum TimecodeVersion
     {
-        V1,
-        V2
+        V1 = -1,
+        V2 = 0
     }
 }
