@@ -20,11 +20,21 @@ namespace TimecodeUtils
                 return;
             }
 
-            var inputInfo = new FileInfo(args[0]);
-            if (!inputInfo.Exists)
+            Timecode.Timecode timecode;
+            if (args[0] == "-")
             {
-                PrintErrorAndHelp($"Error: File not found! {inputInfo.FullName}");
-                return;
+                timecode = new Timecode.Timecode(Console.In);
+            }
+            else
+            {
+                var inputInfo = new FileInfo(args[0]);
+                if (!inputInfo.Exists)
+                {
+                    PrintErrorAndHelp($"Error: File not found! {inputInfo.FullName}");
+                    return;
+                }
+
+                timecode = new Timecode.Timecode(inputInfo.FullName);
             }
 
             try
@@ -33,10 +43,10 @@ namespace TimecodeUtils
                 switch (args[1])
                 {
                     case "info":
-                        InfoActionHandler(inputInfo, restOpts);
+                        InfoActionHandler(timecode, restOpts);
                         return;
                     case "convert":
-                        ConvertActionHandler(inputInfo, restOpts);
+                        ConvertActionHandler(timecode, restOpts);
                         return;
                     default:
                         PrintErrorAndHelp($"Error: No such action! {args[1]}");
@@ -51,9 +61,8 @@ namespace TimecodeUtils
             }
         }
 
-        private static void InfoActionHandler(FileInfo fileInfo, string[] opts)
+        private static void InfoActionHandler(Timecode.Timecode timecode, string[] opts)
         {
-            var timecode = new Timecode.Timecode(fileInfo.FullName);
             switch (opts.Length)
             {
                 case 0:
@@ -66,7 +75,6 @@ namespace TimecodeUtils
                     return;
             }
 
-            Console.WriteLine($" Timecode File: {fileInfo.FullName}");
             Console.WriteLine(
                 $" {"Total Length: ",-20}{timecode.TotalLength,-15:hh\\:mm\\:ss\\.fff}{"Total Frames: ",-20}{timecode.TotalFrames}");
             Console.WriteLine(
@@ -86,7 +94,7 @@ namespace TimecodeUtils
             Console.WriteLine($"+{new string('-', 23)}+{new string('-', 23)}+{new string('-', 12)}+");
         }
 
-        private static void ConvertActionHandler(FileInfo fileInfo, string[] opts)
+        private static void ConvertActionHandler(Timecode.Timecode timecode, string[] opts)
         {
             if (opts.Length == 0)
             {
@@ -94,7 +102,6 @@ namespace TimecodeUtils
                 return;
             }
 
-            var timecode = new Timecode.Timecode(fileInfo.FullName);
             var options = new ConvertOptions
             {
                 Output = opts[0],
