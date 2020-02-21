@@ -12,6 +12,13 @@ namespace TimecodeUtils.Timecode
         private readonly List<RangeInterval> _intervalList = new List<RangeInterval>();
 
         /// <summary>
+        /// Original version of the input timecode
+        /// </summary>
+        public readonly TimecodeVersion Version;
+
+        private double _interval;
+
+        /// <summary>
         /// Enumerable copies of range intervals
         /// </summary>
         public IEnumerable<RangeInterval> IntervalList => _intervalList.Select(i => new RangeInterval(i));
@@ -26,7 +33,15 @@ namespace TimecodeUtils.Timecode
         /// <summary>
         /// Total frames of the timecode file
         /// </summary>
-        public int TotalFrames => _intervalList.Count == 0 ? 0 : _intervalList[_intervalList.Count - 1].EndFrame + 1;
+        public int TotalFrames
+        {
+            get => _intervalList.Count == 0 ? 0 : _intervalList[_intervalList.Count - 1].EndFrame + 1;
+            set
+            {
+                if (Version == TimecodeVersion.V2 || value <= TotalFrames) return;
+                _intervalList.Add(new RangeInterval(TotalFrames, value - 1, _interval));
+            }
+        }
 
         /// <summary>
         /// Average frame rate of the timecode file
@@ -36,16 +51,13 @@ namespace TimecodeUtils.Timecode
         /// <summary>
         /// Calculated default frame rate of the timecode
         /// </summary>
-        public double DefaultFrameRate => _intervalList.Count == 0
-            ? 0
-            : 1e7 / _intervalList.GroupBy(i => i.Interval)
-                .OrderByDescending(g => g.Count())
-                .First().Key;
-
-        /// <summary>
-        /// Original version of the input timecode
-        /// </summary>
-        public readonly MetaData Meta = new MetaData();
+        public double DefaultFrameRate => _interval > 0
+            ? 1e7 / _interval
+            : _intervalList.Count == 0
+                ? 0
+                : 1e7 / _intervalList.GroupBy(i => i.Interval)
+                    .OrderByDescending(g => g.Count())
+                    .First().Key;
 
         /// <summary>
         /// The constructor. It reads timecode info from specific file
@@ -77,11 +89,11 @@ namespace TimecodeUtils.Timecode
             switch (match.Groups[1].Value)
             {
                 case "v1":
-                    Meta.Version = TimecodeVersion.V1;
+                    Version = TimecodeVersion.V1;
                     TimecodeV1Handler(reader, frames);
                     break;
                 case "v2":
-                    Meta.Version = TimecodeVersion.V2;
+                    Version = TimecodeVersion.V2;
                     TimecodeV2Handler(reader);
                     break;
             }
@@ -94,13 +106,13 @@ namespace TimecodeUtils.Timecode
         /// </summary>
         /// <param name="path">The location for timecode file being generated</param>
         /// <param name="version">The version of timecode file</param>
-        public void SaveTimecode(string path, TimecodeVersion version = TimecodeVersion.V2)
+        public void SaveTimecode(string path, TimecodeVersion version = TimecodeVersion.V2, double defaultFps = 0)
         {
             using (var fileStream = new FileStream(path, FileMode.CreateNew, FileAccess.Write))
             {
                 using (var textWriter = new StreamWriter(fileStream))
                 {
-                    SaveTimecode(textWriter, version);
+                    SaveTimecode(textWriter, version, defaultFps);
                 }
             }
         }
@@ -108,14 +120,15 @@ namespace TimecodeUtils.Timecode
         /// <summary>
         /// Function to the timecode file.
         /// </summary>
-        /// <param name="path">The stream for outputing timecode</param>
+        /// <param name="path">The stream for outputted timecode</param>
         /// <param name="version">The version of timecode file</param>
-        public void SaveTimecode(TextWriter writer, TimecodeVersion version = TimecodeVersion.V2)
+        /// <param name="defaultFps">The default FPS of outputted timecode</param>
+        public void SaveTimecode(TextWriter writer, TimecodeVersion version = TimecodeVersion.V2, double defaultFps = 0)
         {
             switch (version)
             {
                 case TimecodeVersion.V1:
-                    SaveTimecodeV1(writer);
+                    SaveTimecodeV1(writer, defaultFps > 0 ? 1e7 / defaultFps : 0);
                     break;
                 case TimecodeVersion.V2:
                     SaveTimecodeV2(writer);
@@ -164,12 +177,6 @@ namespace TimecodeUtils.Timecode
             return new TimeSpan((long) Math.Round(time));
         }
 
-        public void SetTotalFrames(int length)
-        {
-            if (Meta.Version == TimecodeVersion.V2 || length <= TotalFrames) return;
-            _intervalList.Add(new RangeInterval(TotalFrames, length - 1, Meta.Interval));
-        }
-
         private void TimecodeV1Handler(TextReader reader, int frames)
         {
             double defaultInterval = 0;
@@ -185,7 +192,7 @@ namespace TimecodeUtils.Timecode
             }
 
             if (defaultInterval == 0) throw new FormatException("Can not find default frame rate description.");
-            Meta.Interval = defaultInterval;
+            _interval = defaultInterval;
 
             var lineRegex = new Regex(@"^(?<start>\d+)\s*,\s*(?<end>\d+)\s*,\s*(?<rate>\d+(?:\.\d*)?)$");
             while ((line = reader.ReadLine()) != null)
@@ -277,8 +284,8 @@ namespace TimecodeUtils.Timecode
                 lastTime = currentTime;
             }
 
-            Meta.Interval = 1e4 * (lastTime - firstTime) / (currentFrame - firstFrame);
-            _intervalList.Add(new RangeInterval(firstFrame, currentFrame, Meta.Interval));
+            _interval = 1e4 * (lastTime - firstTime) / (currentFrame - firstFrame);
+            _intervalList.Add(new RangeInterval(firstFrame, currentFrame, _interval));
         }
 
         private void NormalizeInterval()
@@ -296,12 +303,12 @@ namespace TimecodeUtils.Timecode
             }
         }
 
-        private void SaveTimecodeV1(TextWriter writer)
+        private void SaveTimecodeV1(TextWriter writer, double defaultInterval = 0)
         {
             writer.WriteLine("# timecode format v1");
-            var modeNumber = _intervalList.GroupBy(i => i.Interval)
-                .OrderByDescending(g => g.Count())
-                .First().Key;
+            var modeNumber = defaultInterval > 0
+                ? defaultInterval
+                : _interval;
             writer.WriteLine($"Assume {1e7 / modeNumber:F6}");
 
             foreach (var interval in _intervalList.Where(interval => interval.Interval != modeNumber))

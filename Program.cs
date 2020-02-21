@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Text;
 using System.Text.RegularExpressions;
 using TimecodeUtils.Options;
 using TimecodeUtils.Timecode;
@@ -22,8 +23,7 @@ namespace TimecodeUtils
             var inputInfo = new FileInfo(args[0]);
             if (!inputInfo.Exists)
             {
-                Console.Error.WriteLine($"Error: File not found! {inputInfo.FullName}");
-                PrintHelp();
+                PrintErrorAndHelp($"Error: File not found! {inputInfo.FullName}");
                 return;
             }
 
@@ -39,7 +39,7 @@ namespace TimecodeUtils
                         ConvertActionHandler(inputInfo, restOpts);
                         return;
                     default:
-                        PrintHelp();
+                        PrintErrorAndHelp($"Error: No such action! {args[1]}");
                         return;
                 }
             }
@@ -48,24 +48,21 @@ namespace TimecodeUtils
                 Console.Error.WriteLine("Unexpected Error:");
                 Console.Error.WriteLine(ex.Message);
                 Console.Error.WriteLine(ex.StackTrace);
-                Console.Error.WriteLine();
-                PrintHelp();
             }
         }
 
         private static void InfoActionHandler(FileInfo fileInfo, string[] opts)
         {
-            Timecode.Timecode timecode;
+            var timecode = new Timecode.Timecode(fileInfo.FullName);
             switch (opts.Length)
             {
                 case 0:
-                    timecode = new Timecode.Timecode(fileInfo.FullName);
                     break;
-                case 1 when int.TryParse(opts[0], out var length):
-                    timecode = new Timecode.Timecode(fileInfo.FullName, length);
+                case 1 when timecode.Version == TimecodeVersion.V1 && int.TryParse(opts[0], out var length):
+                    timecode.TotalFrames = length;
                     break;
                 default:
-                    PrintHelp();
+                    PrintErrorAndHelp("Error: Too many arguments!");
                     return;
             }
 
@@ -91,100 +88,92 @@ namespace TimecodeUtils
 
         private static void ConvertActionHandler(FileInfo fileInfo, string[] opts)
         {
-            var timecode = new Timecode.Timecode(fileInfo.FullName);
-            var options = new ConvertOptions();
-            switch (opts.Length)
+            if (opts.Length == 0)
             {
-                case 0:
+                PrintErrorAndHelp("Error: Too few arguments!");
+                return;
+            }
+
+            var timecode = new Timecode.Timecode(fileInfo.FullName);
+            var options = new ConvertOptions
+            {
+                Output = opts[0],
+                Version = GetInvertTimecodeVersion(timecode.Version)
+            };
+
+            if (opts.Length > 1)
+            {
+                if (opts[1] == "--fix" || opts[1] == "-f")
                 {
-                    options.OutputVersion = GetInvertTimecodeVersion(timecode.Meta.Version);
-                    options.Output = Path.ChangeExtension(fileInfo.FullName,
-                        $".{options.OutputVersion.ToString().ToLower()}{fileInfo.Extension}");
-                    break;
+                    options.Version = timecode.Version;
+                    switch (opts.Length)
+                    {
+                        case 2:
+                            break;
+                        case 3 when options.Version == TimecodeVersion.V1 && TryParseFrameRate(opts[2], out var fps):
+                            options.Fps = fps;
+                            break;
+                        case 3 when options.Version == TimecodeVersion.V1:
+                            PrintErrorAndHelp("Error: Can not parsing arguments");
+                            return;
+                        case 4 when options.Version == TimecodeVersion.V1 && TryParseFrameRate(opts[2], out var fps) &&
+                                    int.TryParse(opts[3], out var length):
+                            timecode.TotalFrames = length;
+                            options.Fps = fps;
+                            break;
+                        case 4 when options.Version == TimecodeVersion.V1:
+                            PrintErrorAndHelp("Error: Can not parsing arguments");
+                            return;
+                        default:
+                            PrintErrorAndHelp("Error: Too many arguments!");
+                            return;
+                    }
                 }
-                case 1 when TryParseVersion(opts[0], out var version):
-                    options.OutputVersion = version;
-                    options.Output = Path.ChangeExtension(fileInfo.FullName,
-                        $".{options.OutputVersion.ToString().ToLower()}{fileInfo.Extension}");
-                    break;
-                case 1 when int.TryParse(opts[0], out var length):
-                    timecode.SetTotalFrames(length);
-                    options.OutputVersion = GetInvertTimecodeVersion(timecode.Meta.Version);
-                    options.Output = Path.ChangeExtension(fileInfo.FullName,
-                        $".{options.OutputVersion.ToString().ToLower()}{fileInfo.Extension}");
-                    break;
-                case 1:
-                    options.OutputVersion = GetInvertTimecodeVersion(timecode.Meta.Version);
-                    options.Output = opts[0];
-                    break;
-                case 2 when TryParseVersion(opts[0], out var version) && int.TryParse(opts[1], out var length):
-                    timecode.SetTotalFrames(length);
-                    options.OutputVersion = version;
-                    options.Output = Path.ChangeExtension(fileInfo.FullName,
-                        $".{options.OutputVersion.ToString().ToLower()}{fileInfo.Extension}");
-                    break;
-                case 2 when int.TryParse(opts[0], out var length) && TryParseVersion(opts[1], out var version):
-                    timecode.SetTotalFrames(length);
-                    options.OutputVersion = version;
-                    options.Output = Path.ChangeExtension(fileInfo.FullName,
-                        $".{options.OutputVersion.ToString().ToLower()}{fileInfo.Extension}");
-                    break;
-                case 2 when TryParseVersion(opts[1], out var version):
-                    options.OutputVersion = version;
-                    options.Output = opts[0];
-                    break;
-                case 2 when int.TryParse(opts[1], out var length):
-                    timecode.SetTotalFrames(length);
-                    options.OutputVersion = GetInvertTimecodeVersion(timecode.Meta.Version);
-                    options.Output = opts[0];
-                    break;
-                case 3 when TryParseVersion(opts[1], out var version) && int.TryParse(opts[2], out var length):
-                    timecode.SetTotalFrames(length);
-                    options.OutputVersion = version;
-                    options.Output = opts[0];
-                    break;
-                case 3 when int.TryParse(opts[1], out var length) && TryParseVersion(opts[2], out var version):
-                    timecode.SetTotalFrames(length);
-                    options.OutputVersion = version;
-                    options.Output = opts[0];
-                    break;
-                default:
-                    PrintHelp();
-                    return;
+                else
+                {
+                    if (opts.Length > 3)
+                    {
+                        PrintErrorAndHelp("Error: Too many arguments!");
+                        return;
+                    }
+
+                    switch (options.Version)
+                    {
+                        case TimecodeVersion.V1 when TryParseFrameRate(opts[1], out var fps):
+                            options.Fps = fps;
+                            break;
+                        case TimecodeVersion.V2 when int.TryParse(opts[1], out var length):
+                            timecode.TotalFrames = length;
+                            break;
+                        default:
+                            PrintErrorAndHelp("Error: Can not parsing arguments");
+                            return;
+                    }
+                }
             }
 
             if (options.Output == "-")
             {
-                timecode.SaveTimecode(Console.Out, options.OutputVersion);
+                timecode.SaveTimecode(Console.Out, options.Version, options.Fps ?? 0);
             }
             else
             {
-                timecode.SaveTimecode(options.Output, options.OutputVersion);
+                timecode.SaveTimecode(options.Output, options.Version, options.Fps ?? 0);
             }
         }
 
-        private static bool TryParseVersion(string str, out TimecodeVersion version)
+        private static bool TryParseFrameRate(string str, out double fps)
         {
-            var verReg = new Regex("v(1|2)");
-            var match = verReg.Match(str);
-            if (!match.Success)
-            {
-                version = default;
-                return false;
-            }
+            fps = default;
+            if (double.TryParse(str, out fps)) return true;
+            var fractionReg = new Regex(@"(\d+)/(\d+)");
+            var match = fractionReg.Match(str);
+            if (!match.Success) return false;
 
-            switch (match.Captures[1].Value)
-            {
-                case "1":
-                    version = TimecodeVersion.V1;
-                    break;
-                case "2":
-                    version = TimecodeVersion.V2;
-                    break;
-                default:
-                    version = default;
-                    return false;
-            }
+            var num = int.Parse(match.Groups[1].Value);
+            var den = int.Parse(match.Groups[2].Value);
+            if (num == 0) return false;
+            fps = 1.0 * num / den;
 
             return true;
         }
@@ -202,6 +191,13 @@ namespace TimecodeUtils
             }
         }
 
+        private static void PrintErrorAndHelp(string error)
+        {
+            Console.Error.WriteLine(error);
+            Console.Error.WriteLine();
+            PrintHelp();
+        }
+
         private static void PrintHelp()
         {
             PrintHelp(Console.Error);
@@ -214,14 +210,15 @@ namespace TimecodeUtils
             textWriter.WriteLine(versionInfo.LegalCopyright);
             textWriter.WriteLine();
             textWriter.WriteLine("Usage:");
-            textWriter.WriteLine("TimecodeUtils INPUT METHOD [...]");
+            textWriter.WriteLine("TimecodeUtils INPUT ACTION [...]");
 
             textWriter.WriteLine();
-            textWriter.WriteLine("Method:");
+            textWriter.WriteLine("Action:");
             textWriter.WriteLine("\tinfo: Show information about a timecode file");
             textWriter.WriteLine("\t\tTimecodeUtils INPUT info [LENGTH]");
             textWriter.WriteLine("\tconvert: Convert a timecode file");
-            textWriter.WriteLine("\t\tTimecodeUtils INPUT convert [OUTPUT] [LENGTH|VERSION] [LENGTH|VERSION]");
+            textWriter.WriteLine("\t\tTimecodeUtils INPUT convert OUTPUT --fix [FPS(V1) [LENGTH(V1)]]");
+            textWriter.WriteLine("\t\tTimecodeUtils INPUT convert OUTPUT [LENGTH(V1)|FPS(V2)]");
         }
     }
 }
