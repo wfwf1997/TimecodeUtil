@@ -48,6 +48,9 @@ namespace TimecodeUtils
                     case "convert":
                         ConvertActionHandler(timecode, restOpts);
                         return;
+                    case "query":
+                        QueryActionHandler(timecode, restOpts);
+                        return;
                     default:
                         PrintErrorAndHelp($"Error: No such action! {args[1]}");
                         return;
@@ -169,6 +172,41 @@ namespace TimecodeUtils
             }
         }
 
+        private static void QueryActionHandler(Timecode.Timecode timecode, string[] restOpts)
+        {
+            if (restOpts.Length == 0)
+            {
+                PrintErrorAndHelp("Error: Please provide at least one timespan/frame for querying!");
+            }
+
+            Console.WriteLine($"+{new string('-', 14)}+{new string('-', 14)}+");
+            Console.WriteLine($"| {"Query",12} | {"Result",12} |");
+            Console.WriteLine($"+{new string('-', 14)}+{new string('-', 14)}+");
+            foreach (var opt in restOpts)
+            {
+                if (int.TryParse(opt, out var frame))
+                {
+                    Console.WriteLine(
+                        $"| {frame,12} " +
+                        $"| {timecode.GetTimeSpanFromFrameNumber(frame),12:hh\\:mm\\:ss\\.fff} |");
+                }
+                else if (TimeSpan.TryParse(opt, out var timeSpan))
+                {
+                    Console.WriteLine(
+                        $"| {timeSpan,12:hh\\:mm\\:ss\\.fff} " +
+                        $"| {timecode.GetFrameNumberFromTimeSpan(timeSpan),12} |");
+                }
+                else
+                {
+                    Console.WriteLine(
+                        $"| {opt.Substring(0, Math.Min(opt.Length, 12)),12} " +
+                        $"| {"Error!",12} |");
+                }
+            }
+
+            Console.WriteLine($"+{new string('-', 14)}+{new string('-', 14)}+");
+        }
+
         private static bool TryParseFrameRate(string str, out double fps)
         {
             fps = default;
@@ -223,9 +261,13 @@ namespace TimecodeUtils
             textWriter.WriteLine("Action:");
             textWriter.WriteLine("\tinfo: Show information about a timecode file");
             textWriter.WriteLine("\t\tTimecodeUtils INPUT info [LENGTH]");
+
             textWriter.WriteLine("\tconvert: Convert a timecode file");
             textWriter.WriteLine("\t\tTimecodeUtils INPUT convert OUTPUT --fix [FPS(V1) [LENGTH(V1)]]");
-            textWriter.WriteLine("\t\tTimecodeUtils INPUT convert OUTPUT [LENGTH(V1)|FPS(V2)]");
+            textWriter.WriteLine("\t\tTimecodeUtils INPUT convert OUTPUT [LENGTH(V1) | FPS(V2)]");
+
+            textWriter.WriteLine("\tquery: Query the frame number or timestamp from the other");
+            textWriter.WriteLine("\t\tTimecodeUtils INPUT query [FRAME NUMBER | TIMESTAMP] ...");
         }
     }
 }
