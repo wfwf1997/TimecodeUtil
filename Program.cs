@@ -1,14 +1,17 @@
-﻿using System;
+/*
+ * Copyright (C) 2020 Mark Wu. All rights reserved.
+ * Licensed under the MIT license. See LICENSE.txt file in the project root for full license information.
+ */
+using System;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
-using System.Text;
 using System.Text.RegularExpressions;
-using TimecodeUtils.Options;
-using TimecodeUtils.Timecode;
+using TimecodeUtil.Options;
+using TimecodeUtil.Timecode;
 
-namespace TimecodeUtils
+namespace TimecodeUtil
 {
     class Program
     {
@@ -251,23 +254,23 @@ namespace TimecodeUtils
         private static void PrintHelp(TextWriter textWriter)
         {
             var versionInfo = FileVersionInfo.GetVersionInfo(Assembly.GetExecutingAssembly().Location);
-            textWriter.WriteLine($"Timecode Utils v{versionInfo.FileVersion}");
+            textWriter.WriteLine($"Timecode Util v{versionInfo.FileVersion}");
             textWriter.WriteLine(versionInfo.LegalCopyright);
             textWriter.WriteLine();
             textWriter.WriteLine("Usage:");
-            textWriter.WriteLine("TimecodeUtils INPUT ACTION [...]");
+            textWriter.WriteLine("TimecodeUtil INPUT ACTION [...]");
 
             textWriter.WriteLine();
             textWriter.WriteLine("Action:");
             textWriter.WriteLine("\tinfo: Show information about a timecode file");
-            textWriter.WriteLine("\t\tTimecodeUtils INPUT info [LENGTH]");
+            textWriter.WriteLine("\t\tTimecodeUtil INPUT info [LENGTH]");
 
             textWriter.WriteLine("\tconvert: Convert a timecode file");
-            textWriter.WriteLine("\t\tTimecodeUtils INPUT convert OUTPUT --fix [FPS(V1) [LENGTH(V1)]]");
-            textWriter.WriteLine("\t\tTimecodeUtils INPUT convert OUTPUT [LENGTH(V1) | FPS(V2)]");
+            textWriter.WriteLine("\t\tTimecodeUtil INPUT convert OUTPUT --fix [FPS(V1) [LENGTH(V1)]]");
+            textWriter.WriteLine("\t\tTimecodeUtil INPUT convert OUTPUT [LENGTH(V1) | FPS(V2)]");
 
             textWriter.WriteLine("\tquery: Query the frame number or timestamp from the other");
-            textWriter.WriteLine("\t\tTimecodeUtils INPUT query [FRAME NUMBER | TIMESTAMP] ...");
+            textWriter.WriteLine("\t\tTimecodeUtil INPUT query [FRAME NUMBER | TIMESTAMP] ...");
         }
     }
 }

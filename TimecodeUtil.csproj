@@ -1,9 +1,9 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFrameworks>net45;netcoreapp3.1</TargetFrameworks>
-    <StartupObject>TimecodeUtils.Program</StartupObject>
+    <StartupObject>TimecodeUtil.Program</StartupObject>
     <Authors>Mark Wu</Authors>
     <Copyright>Copyright 2020 Mark Wu</Copyright>
   </PropertyGroup>
